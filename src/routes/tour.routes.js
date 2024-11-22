@@ -7,6 +7,8 @@ router
   .post(tourController.createTour)
   .get(tourController.getAllTours);
 
+// .post(tourController.migrate);
+
 router
   .route('/:id')
   .get(tourController.getTourById)
