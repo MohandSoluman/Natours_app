@@ -2,20 +2,10 @@ const Tour = require('../models/tour.model');
 const fs = require('fs').promises;
 const path = require('path');
 const ApiFeatures = require('../utils/apiFeatures');
+const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/appError');
+const mongoose = require('mongoose');
 
-// Helper function for consistent error handling
-const handleError = (
-  res,
-  error,
-  statusCode = 400,
-  message = 'An error occurred'
-) => {
-  res.status(statusCode).json({
-    status: 'fail',
-    message: typeof error === 'string' ? error : error.message || message,
-  });
-};
-// Helper function for consistent success responses
 const handleSuccess = (res, data, message = 'success', statusCode = 200) => {
   res.status(statusCode).json({
     status: message,
@@ -37,58 +27,51 @@ const createTour = async (req, res) => {
   }
 };
 
-const getAllTours = async (req, res) => {
-  try {
-    const featurs = new ApiFeatures(Tour.find(), req.query)
-      .filter()
-      .sort()
-      .limitFields()
-      .paginate();
-    const tours = await featurs.query;
-    handleSuccess(res, tours);
-  } catch (error) {
-    handleError(res, error);
-  }
-};
+const getAllTours = catchAsync(async (req, res) => {
+  const featurs = new ApiFeatures(Tour.find(), req.query)
+    .filter()
+    .sort()
+    .limitFields()
+    .paginate();
+  const tours = await featurs.query;
+  handleSuccess(res, tours);
+});
 
-const getTourById = async (req, res) => {
-  try {
-    const tour = await Tour.findById(req.params.id);
-    if (!tour) {
-      return handleError(res, 'not found', 404);
-    }
-    handleSuccess(res, tour);
-  } catch (error) {
-    handleError(res, error);
-  }
-};
+const getTourById = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
 
-const updateTour = async (req, res) => {
-  try {
-    const tour = await Tour.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!tour) {
-      return handleError(res, 'not found', 404);
-    }
-    handleSuccess(res, tour);
-  } catch (error) {
-    handleError(res, error);
+  // Validate the ID
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return next(new AppError('Invalid tour ID format', 400));
   }
-};
 
-const deleteTour = async (req, res) => {
-  try {
-    const tour = await Tour.findByIdAndDelete(req.params.id);
-    if (!tour) {
-      return handleError(res, 'not found', 404);
-    }
-    handleSuccess(res, tour);
-  } catch (error) {
-    handleError(res, error);
+  const tour = await Tour.findById(id);
+
+  if (!tour) {
+    return next(new AppError('No tour found with this ID', 404));
   }
-};
+
+  handleSuccess(res, tour);
+});
+
+const updateTour = catchAsync(async (req, res) => {
+  const tour = await Tour.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true,
+  });
+  if (!tour) {
+    return next(new AppError(`no tour found with this id `, 404));
+  }
+  handleSuccess(res, tour);
+});
+
+const deleteTour = catchAsync(async (req, res) => {
+  const tour = await Tour.findByIdAndDelete(req.params.id);
+  if (!tour) {
+    return next(new AppError(`no tour found with this id `, 404));
+  }
+  handleSuccess(res, tour);
+});
 
 //this function will run once on start project
 const migrate = async (req, res, next) => {
@@ -115,6 +98,30 @@ const migrate = async (req, res, next) => {
   }
 };
 
+const getStats = async (req, res) => {
+  try {
+    const stats = await Tour.aggregate([
+      {
+        $match: { ratingsAverage: { $gte: 4.5 } },
+      },
+      {
+        $group: {
+          _id: null,
+          numTours: { $sum: 1 },
+          numRatings: { $sum: '$ratingsQuantity' },
+          avgRating: { $avg: '$ratingsAverage' },
+          avgPrice: { $avg: '$price' },
+          minPrice: { $min: '$price' },
+          maxPrice: { $max: '$price' },
+        },
+      },
+    ]);
+    handleSuccess(res, stats);
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 module.exports = {
   createTour,
   getAllTours,
@@ -122,4 +129,5 @@ module.exports = {
   updateTour,
   deleteTour,
   migrate,
+  getStats,
 };

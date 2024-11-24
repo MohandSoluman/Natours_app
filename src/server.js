@@ -2,6 +2,12 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const dbConfig = require('../db.config');
 
+process.on('uncaughtException', (err) => {
+  console.log('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.log(err.name, err.message);
+  process.exit(1);
+});
+
 const { urlFromLocal, urlFromContainer } = dbConfig;
 
 let url = urlFromContainer;
