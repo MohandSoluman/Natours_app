@@ -1,10 +1,7 @@
 const Tour = require('../models/tour.model');
 const fs = require('fs').promises;
 const path = require('path');
-const ApiFeatures = require('../utils/apiFeatures');
-const catchAsync = require('../utils/catchAsync');
-const AppError = require('../utils/appError');
-const mongoose = require('mongoose');
+const factory = require('./handlerFactory');
 
 const handleSuccess = (res, data, message = 'success', statusCode = 200) => {
   res.status(statusCode).json({
@@ -14,67 +11,14 @@ const handleSuccess = (res, data, message = 'success', statusCode = 200) => {
   });
 };
 
-const createTour = async (req, res) => {
-  try {
-    const newTour = await Tour.create(req.body);
-    res.status(201).json({
-      status: 'success',
-      data: { newTour },
-    });
-    handleSuccess(res, newTour, 'Tour created successfully', 201);
-  } catch (error) {
-    handleError(res, error);
-  }
-};
-
-const getAllTours = catchAsync(async (req, res) => {
-  const featurs = new ApiFeatures(Tour.find(), req.query)
-    .filter()
-    .sort()
-    .limitFields()
-    .paginate();
-  const tours = await featurs.query;
-  handleSuccess(res, tours);
-});
-
-const getTourById = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
-
-  // Validate the ID
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return next(new AppError('Invalid tour ID format', 400));
-  }
-
-  const tour = await Tour.findById(id);
-
-  if (!tour) {
-    return next(new AppError('No tour found with this ID', 404));
-  }
-
-  handleSuccess(res, tour);
-});
-
-const updateTour = catchAsync(async (req, res) => {
-  const tour = await Tour.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
-  if (!tour) {
-    return next(new AppError(`no tour found with this id `, 404));
-  }
-  handleSuccess(res, tour);
-});
-
-const deleteTour = catchAsync(async (req, res) => {
-  const tour = await Tour.findByIdAndDelete(req.params.id);
-  if (!tour) {
-    return next(new AppError(`no tour found with this id `, 404));
-  }
-  handleSuccess(res, tour);
-});
+exports.createTour = factory.createOne(Tour);
+exports.getAllTours = factory.getAll(Tour);
+exports.getTourById = factory.getOne(Tour, { path: 'reviews' });
+exports.updateTour = factory.updateOne(Tour);
+exports.deleteTour = factory.deleteOne(Tour);
 
 //this function will run once on start project
-const migrate = async (req, res, next) => {
+exports.migrate = async (req, res, next) => {
   try {
     const filePath = path.join(__dirname, '../dev-data/data/tours.json');
     const data = await fs.readFile(filePath, 'utf-8'); // Use async file reading
@@ -98,7 +42,7 @@ const migrate = async (req, res, next) => {
   }
 };
 
-const getStats = async (req, res) => {
+exports.getStats = async (req, res) => {
   try {
     const stats = await Tour.aggregate([
       {
@@ -120,14 +64,4 @@ const getStats = async (req, res) => {
   } catch (error) {
     handleError(res, error);
   }
-};
-
-module.exports = {
-  createTour,
-  getAllTours,
-  getTourById,
-  updateTour,
-  deleteTour,
-  migrate,
-  getStats,
 };
